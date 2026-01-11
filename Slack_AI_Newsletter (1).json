@@ -1,0 +1,300 @@
+{
+  "name": "Slack_AI_Newsletter",
+  "nodes": [
+    {
+      "parameters": {
+        "trigger": [
+          "app_mention"
+        ],
+        "channelId": {
+          "__rl": true,
+          "value": "C0A81EP2DL4",
+          "mode": "list",
+          "cachedResultName": "all-n8ndemonewsletter"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        784
+      ],
+      "id": "08b754a9-e331-4c88-88c6-270a121fd9cc",
+      "name": "Slack Trigger",
+      "webhookId": "84c9b0af-6bfe-4c56-a02e-93391cae8cce",
+      "executeOnce": false,
+      "alwaysOutputData": false,
+      "credentials": {
+        "slackApi": {
+          "id": "Nebsqqc0OceXyF57",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract topic from Slack message text\n// Expected format: \"@bot news about [topic]\" or \"Alert: Get the latest news about [topic]\"\nconst text = $input.item.json.text || \"\";\n\n// Split by 'about' and get everything after it\nconst parts = text.split('about');\nconst topic = parts.length > 1 ? parts.pop().trim() : \"technology\";\n\nreturn [\n  {\n    json: {\n      topic: topic,\n      originalText: text\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -976,
+        784
+      ],
+      "id": "dfd8581f-3237-439a-a175-fee16724c0b7",
+      "name": "Extract Topic"
+    },
+    {
+      "parameters": {
+        "url": "=https://gnews.io/api/v4/search?q={{encodeURIComponent($json.topic.trim())}}&lang=en&country=us&max=10&apikey=fb7c431c08a1167ee569428d69b3b1c5",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 25000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -800,
+        784
+      ],
+      "id": "f06786da-483c-4a84-ac0c-de42fa7c180c",
+      "name": "Fetch News from API"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract articles from HTTP response AND get topic from previous node\nconst responseBody = $input.item.json.body || {};\nconst articles = responseBody.articles || [];\n\n// CRITICAL: Get topic from the Extract Topic node\nconst topic = $('Extract Topic').item.json.topic || \"Top News\";\n\n// Keep only clean, relevant fields\nconst cleanedArticles = articles.slice(0, 10).map(a => ({\n  title: a.title,\n  description: a.description,\n  source: a.source?.name,\n  url: a.url,\n  publishedAt: a.publishedAt\n}));\n\n// Return with topic preserved\nreturn [\n  {\n    json: {\n      articles: cleanedArticles,\n      topic: topic\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        784
+      ],
+      "id": "0341f8b2-ea96-4517-8d2c-380629811af3",
+      "name": "Extract News"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4-turbo",
+          "mode": "list",
+          "cachedResultName": "GPT-4-TURBO"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an expert newsletter editor and HTML designer.\nYour task is to take a list of news articles and turn them into an elegant, mobile-friendly HTML newsletter.\nUse a clean modern color theme – shades of deep blue (#1e3a8a) and soft gray (#f9fafb).\nInclude:\n- A title banner with the topic name\n- Each article with headline, short description, and clickable link\n- Small source and date labels\n- Clear spacing and padding between articles\n\nThe HTML should:\n- Be valid and responsive\n- Avoid unnecessary scripts or inline JavaScript\n- Use only standard HTML + inline CSS for styling\n- Begin with <!DOCTYPE html> and include <head> and <body> sections"
+            },
+            {
+              "content": "=You are an expert newsletter editor. Write a clean, beautiful, mobile-friendly HTML newsletter about \"{{$json.topic}}\" using the articles below.\n\nUse exactly these articles – no placeholders or sample data.\n\nEach article must have:\n- A clickable title linked to its URL\n- A short description (2-3 sentences)\n- The source name and date\n- Consistent spacing and design\n\nUse a white background, blue highlights, and professional typography.\n\nReturn **only valid HTML** starting with <!DOCTYPE html>. Do NOT include Markdown, code blocks, or commentary.\n\nArticles JSON:\n{{ JSON.stringify($json.articles, null, 2) }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 2000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -352,
+        784
+      ],
+      "id": "f36776ef-6960-4411-addf-ccc215e80777",
+      "name": "Generate Newsletter HTML",
+      "credentials": {
+        "openAiApi": {
+          "id": "dDZUKWyIP81izJng",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract HTML from OpenAI output\nconst html = $input.item.json.output?.[0]?.content?.[0]?.text?.trim() || \"\";\n\n// Get topic from the Extract News node\nconst topic = $('Extract News').item.json.topic || \"Top News\";\n\nreturn [\n  {\n    json: {\n      html: html,\n      topic: topic\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        784
+      ],
+      "id": "16a7e9c2-5087-4815-b3ff-b53e60bfccd6",
+      "name": "Extract HTML"
+    },
+    {
+      "parameters": {
+        "sendTo": "write2flutenavin@gmail.com, prakash.kps@gmail.com, krithikaapril4@gmail.com",
+        "subject": "=Here's the latest about {{$json.topic}}",
+        "message": "={{$json.html}}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        96,
+        784
+      ],
+      "id": "ed66a8f4-7f45-4aa2-b3d0-35845b8b02d9",
+      "name": "Email Newsletter",
+      "webhookId": "778ed438-7a19-4dc9-b7b1-2b2ae35d2842",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "22YaGO0R0hILICDP",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format articles for Slack with full previews\nconst articles = $input.item.json.articles || [];\nconst topic = $input.item.json.topic || \"Top News\";\n\nlet lines = [];\nfor (const article of articles.slice(0, 10)) {\n  const title = article.title || \"Unknown\";\n  const url = article.url || \"\";\n  const desc = article.description || \"No description available\";\n  const source = article.source || \"Unknown source\";\n  const date = article.publishedAt ? new Date(article.publishedAt).toLocaleDateString() : \"\";\n  \n  // Format each article with title, description, source and date\n  lines.push(`📰 *<${url}|${title}>*\\n${desc}\\n_${source}${date ? \" • \" + date : \"\"}_`);\n}\n\nconst slackText = `:newspaper: *Top Stories about ${topic}*\\n\\n${lines.join(\"\\n\\n\")}\\n\\n_Automated with n8n workflow_`;\n\nreturn [{ \n  json: { \n    slackText: slackText,\n    topic: topic \n  } \n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        928
+      ],
+      "id": "ed414d41-e74b-4800-832f-6c3cf4a910db",
+      "name": "Format Slack Message"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0A81EP2DL4",
+          "mode": "list",
+          "cachedResultName": "all-n8ndemonewsletter"
+        },
+        "text": "={{$json.slackText}}",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        -128,
+        928
+      ],
+      "id": "981cfcf1-9f96-49b2-bada-84f09dc68b2a",
+      "name": "Post to Slack",
+      "webhookId": "68a9dc9d-54ea-4cdf-b899-66e4bcf502a0",
+      "credentials": {
+        "slackApi": {
+          "id": "Nebsqqc0OceXyF57",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Slack Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Topic": {
+      "main": [
+        [
+          {
+            "node": "Fetch News from API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News from API": {
+      "main": [
+        [
+          {
+            "node": "Extract News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract News": {
+      "main": [
+        [
+          {
+            "node": "Generate Newsletter HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Newsletter HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract HTML": {
+      "main": [
+        [
+          {
+            "node": "Email Newsletter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Slack Message": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "6b6d9a65-1e73-4ca5-9da4-bbf6e53b79e3",
+  "meta": {
+    "instanceId": "2663d6fedea473c683980469839ba257ab867ff45f323139269fc6d250250122"
+  },
+  "id": "q6yYyE229JrzTxLX",
+  "tags": []
+}
